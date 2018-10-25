@@ -105,21 +105,10 @@ public class ZigBeeSerialPort implements ZigBeePort, SerialPortEventListener {
                 CommPortIdentifier portIdentifier = CommPortIdentifier.getPortIdentifier(portName);
                 CommPort commPort = portIdentifier.open("org.openhab.binding.zigbee", 100);
                 serialPort = (SerialPort) commPort;
+
                 serialPort.setSerialPortParams(baudRate, SerialPort.DATABITS_8, SerialPort.STOPBITS_1,
                         SerialPort.PARITY_NONE);
-                switch (flowControl) {
-                    case FLOWCONTROL_OUT_NONE:
-                        serialPort.setFlowControlMode(gnu.io.SerialPort.FLOWCONTROL_NONE);
-                        break;
-                    case FLOWCONTROL_OUT_RTSCTS:
-                        serialPort.setFlowControlMode(gnu.io.SerialPort.FLOWCONTROL_RTSCTS_OUT);
-                        break;
-                    case FLOWCONTROL_OUT_XONOFF:
-                        serialPort.setFlowControlMode(gnu.io.SerialPort.FLOWCONTROL_XONXOFF_OUT);
-                        break;
-                    default:
-                        break;
-                }
+                serialPort.setFlowControlMode(getFlowControlMode());
 
                 serialPort.enableReceiveThreshold(1);
                 serialPort.enableReceiveTimeout(100);
@@ -249,6 +238,18 @@ public class ZigBeeSerialPort implements ZigBeePort, SerialPortEventListener {
     public void purgeRxBuffer() {
         synchronized (receiveBuffer) {
             receiveBuffer.purge();
+        }
+    }
+
+    private int getFlowControlMode() {
+        switch (flowControl) {
+            case FLOWCONTROL_OUT_RTSCTS:
+                return gnu.io.SerialPort.FLOWCONTROL_RTSCTS_OUT;
+            case FLOWCONTROL_OUT_XONOFF:
+                return gnu.io.SerialPort.FLOWCONTROL_XONXOFF_OUT;
+            case FLOWCONTROL_OUT_NONE:
+            default:
+                return gnu.io.SerialPort.FLOWCONTROL_NONE;
         }
     }
 
