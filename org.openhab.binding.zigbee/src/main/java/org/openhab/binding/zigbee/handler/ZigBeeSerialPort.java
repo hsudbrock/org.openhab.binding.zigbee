@@ -18,7 +18,6 @@ import org.slf4j.LoggerFactory;
 
 import com.zsmartsystems.zigbee.transport.ZigBeePort;
 
-import gnu.io.CommPort;
 import gnu.io.CommPortIdentifier;
 import gnu.io.NoSuchPortException;
 import gnu.io.PortInUseException;
@@ -33,13 +32,13 @@ import gnu.io.UnsupportedCommOperationException;
  * @author Chris Jackson
  */
 public class ZigBeeSerialPort implements ZigBeePort, SerialPortEventListener {
-    /**
-     * The logger.
-     */
-    private final Logger logger = LoggerFactory.getLogger(ZigBeeSerialPort.class);
+
+    private final Logger logger = LoggerFactory.getLogger(this.getClass());
+
+    private static final String SERIAL_PORT_OWNER_NAME = "org.openhab.binding.zigbee";
 
     /**
-     * The portName portName.
+     * The wrapped {@link SerialPort} instance.
      */
     private SerialPort serialPort;
 
@@ -69,7 +68,7 @@ public class ZigBeeSerialPort implements ZigBeePort, SerialPortEventListener {
     private final int baudRate;
 
     /**
-     * True to enable RTS / CTS flow control
+     * The flow control mechanism.
      */
     private final FlowControl flowControl;
 
@@ -101,15 +100,14 @@ public class ZigBeeSerialPort implements ZigBeePort, SerialPortEventListener {
         try {
             logger.debug("Connecting to serial port [{}] at {} baud, flow control {}.", portName, baudRate,
                     flowControl);
+
             try {
                 CommPortIdentifier portIdentifier = CommPortIdentifier.getPortIdentifier(portName);
-                CommPort commPort = portIdentifier.open("org.openhab.binding.zigbee", 100);
-                serialPort = (SerialPort) commPort;
+                serialPort = (SerialPort) portIdentifier.open(SERIAL_PORT_OWNER_NAME, 100);
 
                 serialPort.setSerialPortParams(baudRate, SerialPort.DATABITS_8, SerialPort.STOPBITS_1,
                         SerialPort.PARITY_NONE);
                 serialPort.setFlowControlMode(getFlowControlMode());
-
                 serialPort.enableReceiveThreshold(1);
                 serialPort.enableReceiveTimeout(100);
                 serialPort.addEventListener(this);
@@ -134,13 +132,16 @@ public class ZigBeeSerialPort implements ZigBeePort, SerialPortEventListener {
                 inputStream = serialPort.getInputStream();
                 outputStream = serialPort.getOutputStream();
             } catch (IOException e) {
+                logger.info("Serial error: Input or output stream could not be retrieved from serial port", e);
+                return false;
             }
 
-            return true;
         } catch (Exception e) {
             logger.error("Unable to open serial port: ", e);
             return false;
         }
+
+        return true;
     }
 
     @Override
@@ -160,6 +161,7 @@ public class ZigBeeSerialPort implements ZigBeePort, SerialPortEventListener {
                 serialPort = null;
                 inputStream = null;
                 outputStream = null;
+                receiveBuffer.purge();
 
                 synchronized (this) {
                     this.notify();
@@ -200,11 +202,12 @@ public class ZigBeeSerialPort implements ZigBeePort, SerialPortEventListener {
                     }
                 }
 
-                synchronized (this) {
-                    if (serialPort == null) {
-                        return -1;
-                    }
+                // Break from the loop if the serial port was removed when closing the port.
+                if (serialPort == null) {
+                    return -1;
+                }
 
+                synchronized (this) {
                     wait(endTime - System.currentTimeMillis());
                 }
             }
@@ -226,6 +229,7 @@ public class ZigBeeSerialPort implements ZigBeePort, SerialPortEventListener {
                     }
                 }
             } catch (IOException e) {
+                logger.debug("IOException while reading from serial port " + portName, e);
             }
 
             synchronized (this) {
