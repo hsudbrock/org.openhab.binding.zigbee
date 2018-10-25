@@ -54,6 +54,11 @@ public class ZigBeeSerialPort implements ZigBeePort, SerialPortEventListener {
     private OutputStream outputStream;
 
     /**
+     * Circular buffer for received data. Lock on this object to synchronize access to the buffer.
+     */
+    private CircularBuffer receiveBuffer = new CircularBuffer();
+
+    /**
      * The port identifier.
      */
     private final String portName;
@@ -69,35 +74,10 @@ public class ZigBeeSerialPort implements ZigBeePort, SerialPortEventListener {
     private final FlowControl flowControl;
 
     /**
-     * The length of the receive buffer
-     */
-    private final int RX_BUFFER_LEN = 512;
-
-    /**
-     * The circular fifo queue for receive data
-     */
-    private final int[] buffer = new int[RX_BUFFER_LEN];
-
-    /**
-     * The receive buffer end pointer (where we put the newly received data)
-     */
-    private int end = 0;
-
-    /**
-     * The receive buffer start pointer (where we take the data to pass to the application)
-     */
-    private int start = 0;
-
-    /**
-     * Synchronisation object for buffer queue manipulation
-     */
-    private final Object bufferSynchronisationObject = new Object();
-
-    /**
      * Constructor setting port name and baud rate.
      *
-     * @param portName the port name
-     * @param baudRate the baud rate
+     * @param portName    the port name
+     * @param baudRate    the baud rate
      * @param flowControl to use flow control
      */
     public ZigBeeSerialPort(String portName, int baudRate, FlowControl flowControl) {
@@ -225,13 +205,9 @@ public class ZigBeeSerialPort implements ZigBeePort, SerialPortEventListener {
 
         try {
             while (System.currentTimeMillis() < endTime) {
-                synchronized (bufferSynchronisationObject) {
-                    if (start != end) {
-                        int value = buffer[start++];
-                        if (start >= RX_BUFFER_LEN) {
-                            start = 0;
-                        }
-                        return value;
+                synchronized (receiveBuffer) {
+                    if (!receiveBuffer.isEmpty()) {
+                        return receiveBuffer.take();
                     }
                 }
 
@@ -254,13 +230,10 @@ public class ZigBeeSerialPort implements ZigBeePort, SerialPortEventListener {
     public void serialEvent(SerialPortEvent event) {
         if (event.getEventType() == SerialPortEvent.DATA_AVAILABLE) {
             try {
-                synchronized (bufferSynchronisationObject) {
+                synchronized (receiveBuffer) {
                     int recv;
                     while ((recv = inputStream.read()) != -1) {
-                        buffer[end++] = recv;
-                        if (end >= RX_BUFFER_LEN) {
-                            end = 0;
-                        }
+                        receiveBuffer.put(recv);
                     }
                 }
             } catch (IOException e) {
@@ -274,9 +247,8 @@ public class ZigBeeSerialPort implements ZigBeePort, SerialPortEventListener {
 
     @Override
     public void purgeRxBuffer() {
-        synchronized (bufferSynchronisationObject) {
-            start = 0;
-            end = 0;
+        synchronized (receiveBuffer) {
+            receiveBuffer.purge();
         }
     }
 
