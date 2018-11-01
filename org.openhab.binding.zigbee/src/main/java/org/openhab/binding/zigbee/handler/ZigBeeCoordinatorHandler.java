@@ -379,27 +379,6 @@ public abstract class ZigBeeCoordinatorHandler extends BaseBridgeHandler
             }
         }
 
-        // Initialise the network
-        switch (networkManager.initialize()) {
-            case SUCCESS:
-                break;
-            case BAD_RESPONSE:
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE, ZigBeeBindingConstants.OFFLINE_BAD_RESPONSE);
-                return;
-            case COMMUNICATION_ERROR:
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE, ZigBeeBindingConstants.OFFLINE_COMMS_FAIL);
-                return;
-            default:
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE,
-                        ZigBeeBindingConstants.OFFLINE_INITIALIZE_FAIL);
-                return;
-        }
-
-        // Get the initial network configuration
-        ZigBeeChannel currentChannel = networkManager.getZigBeeChannel();
-        int currentPanId = networkManager.getZigBeePanId();
-        ExtendedPanId currentExtendedPanId = networkManager.getZigBeeExtendedPanId();
-
         if (initializeNetwork) {
             logger.debug("Link key initialise {}", linkKey);
             logger.debug("Network key initialise {}", networkKey);
@@ -418,16 +397,31 @@ public abstract class ZigBeeCoordinatorHandler extends BaseBridgeHandler
 
         zigbeeTransport.updateTransportConfig(transportConfig);
 
+        // Initialise the network
+        switch (networkManager.initialize()) {
+            case SUCCESS:
+                break;
+            case BAD_RESPONSE:
+                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE, ZigBeeBindingConstants.OFFLINE_BAD_RESPONSE);
+                return;
+            case COMMUNICATION_ERROR:
+                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE, ZigBeeBindingConstants.OFFLINE_COMMS_FAIL);
+                return;
+            default:
+                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE,
+                        ZigBeeBindingConstants.OFFLINE_INITIALIZE_FAIL);
+                return;
+        }
+
         // Call startup. The setting of the bring to ONLINE will be done via the state listener.
-        if (networkManager.startup(initializeNetwork) != ZigBeeStatus.SUCCESS) {
+        if (networkManager.startup(false) != ZigBeeStatus.SUCCESS) {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE, ZigBeeBindingConstants.OFFLINE_STARTUP_FAIL);
             return;
         }
 
-        // Get the final network configuration
-        currentChannel = networkManager.getZigBeeChannel();
-        currentPanId = networkManager.getZigBeePanId();
-        currentExtendedPanId = networkManager.getZigBeeExtendedPanId();
+        ZigBeeChannel currentChannel = networkManager.getZigBeeChannel();
+        int currentPanId = networkManager.getZigBeePanId();
+        ExtendedPanId currentExtendedPanId = networkManager.getZigBeeExtendedPanId();
         logger.debug("ZigBee Initialise done. channel={}, PanId={}  EPanId={}", currentChannel, currentPanId,
                 currentExtendedPanId);
 
